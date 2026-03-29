@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Thí nghiệm mô phỏng cơ năng - Hachimi OS v16.1</title>
+    <style>
+        body { font-family: 'Orbitron', sans-serif; background: #000; margin: 0; overflow: hidden; color: white; display: flex; height: 100vh; cursor: none; }
+        
+        #boot { position: fixed; inset: 0; background: #000; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #boot-bar { width: 350px; height: 6px; background: #111; border-radius: 10px; margin-top: 25px; overflow: hidden; border: 1px solid #333; }
+        #boot-prog { height: 100%; background: linear-gradient(90deg, #00e5ff, #ff007f); width: 0%; box-shadow: 0 0 20px #00e5ff; }
+
+        #cursor-neon { position: fixed; width: 15px; height: 15px; border: 2px solid #fff; border-radius: 50%; pointer-events: none; z-index: 10001; transform: translate(-50%, -50%); box-shadow: 0 0 15px currentColor; }
+        .crack { position: fixed; pointer-events: none; z-index: 9999; }
+        .shock { position: fixed; border: 2px solid var(--c); border-radius: 50%; pointer-events: none; z-index: 9998; animation: sw 0.4s ease-out forwards; transform: translate(-50%, -50%); }
+        @keyframes sw { 0% { width: 0; height: 0; opacity: 1; border-width: 4px; } 100% { width: 130px; height: 130px; opacity: 0; border-width: 1px; } }
+        
+        #ctx-menu { position: fixed; display: none; background: #1a1a1a; border: 1px solid #00e5ff; padding: 5px; z-index: 5000; border-radius: 5px; box-shadow: 0 0 20px rgba(0,0,0,0.8); min-width: 120px; }
+        .ctx-item { padding: 10px 15px; cursor: pointer; font-size: 11px; transition: 0.2s; border-bottom: 1px solid #333; }
+        .ctx-item:last-child { border: none; }
+        .ctx-item:hover { background: #00e5ff; color: #000; font-weight: bold; }
+
+        #sidebar { width: 360px; background: rgba(5, 5, 10, 0.98); border-right: 2px solid #00e5ff; padding: 15px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; overflow-y: auto; }
+        #sidebar.hide { display: none; }
+        #top-ui { position: fixed; top: 0; left: 0; right: 0; height: 85px; background: rgba(10, 0, 30, 0.95); border-bottom: 2px solid #7b1fa2; display: none; align-items: center; padding: 0 20px; gap: 12px; z-index: 999; }
+        
+        #ui-drawer { position: fixed; right: -330px; bottom: 20px; width: 310px; background: rgba(10, 10, 25, 0.98); border: 2px solid #00e5ff; border-radius: 15px 0 0 15px; padding: 15px; z-index: 2000; transition: right 0.4s; }
+        #ui-drawer.open { right: 0; }
+        #ui-handle { position: absolute; left: -45px; top: 50%; transform: translateY(-50%); width: 45px; height: 65px; background: #00e5ff; color: #000; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 15px 0 0 15px; font-size: 24px; }
+
+        #canvas-wrap { flex: 1; position: relative; background: #000; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        .group { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; border: 1px solid #333; }
+        .btn { padding: 8px 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 10px; color: white; text-transform: uppercase; width: 100%; margin-bottom: 4px; }
+        .btn-blue { background: #00e5ff; color: #000; }
+        
+        .bar-container { width: 100%; height: 16px; background: #000; border-radius: 8px; display: flex; overflow: hidden; border: 1px solid #444; margin: 4px 0; }
+        .seg { height: 100%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: bold; color: #000; }
+        .ball-label { position: absolute; pointer-events: none; width: 160px; transform: translate(25px, -25px); text-shadow: 1px 1px 2px #000; }
+        .mini-bar { height: 6px; width: 80px; background: #222; border-radius: 3px; display: flex; overflow: hidden; margin-top: 3px; }
+
+        input[type=range] { width: 100%; accent-color: #00e5ff; }
+        label { font-size: 10px; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+<div id="cursor-neon"></div>
+<div id="ctx-menu"></div>
+
+<div id="boot">
+    <div style="font-size:30px; font-weight:900; letter-spacing:10px;">HACHIMI OS</div>
+    <div id="boot-bar"><div id="boot-prog"></div></div>
+    <div style="margin-top:10px; font-size:10px; color:#444;">REFINING TRANSFORM TOOLS...</div>
+</div>
+
+<div id="ui-drawer">
+    <div id="ui-handle" onclick="document.getElementById('ui-drawer').classList.toggle('open')">◀</div>
+    <button class="btn btn-blue" onclick="toggleUI()">ĐỔI GIAO DIỆN</button>
+    <button class="btn" style="background:#ff9100;" onclick="location.reload()">REBOOT OS</button>
+</div>
+
+<div id="sidebar">
+    <h3 style="color:#00e5ff; text-align:center; margin:0; font-size:16px;">Thí nghiệm mô phỏng cơ năng</h3>
+    <div class="group">
+        <button class="btn btn-blue" onclick="spawnBall()">+ THÊM BÓNG (MAX 5)</button>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-top:8px;">
+            <button class="btn" style="background:#7b1fa2" onclick="addTrack('line')">Đ. THẲNG</button>
+            <button class="btn" style="background:#7b1fa2" onclick="addTrack('curve')">Đ. CONG</button>
+        </div>
+    </div>
+    
+    <div class="group">
+        <div style="font-size:10px; color:#888; margin-bottom:5px;">TEMPLATES ĐỊA HÌNH:</div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:3px;">
+            <button class="btn" style="background:#333; font-size:8px;" onclick="loadTemplate('mountain')">NÚI ĐƠN</button>
+            <button class="btn" style="background:#333; font-size:8px;" onclick="loadTemplate('valley')">THUNG LŨNG</button>
+            <button class="btn" style="background:#333; font-size:8px;" onclick="loadTemplate('loop')">CONG DỐC</button>
+            <button class="btn" style="background:#333; font-size:8px;" onclick="loadTemplate('wave')">SÓNG LƯỢN</button>
+        </div>
+    </div>
+
+    <div class="group" id="side-ctrl"></div>
+    <div id="sidebar-stats"></div>
+</div>
+
+<div id="top-ui">
+    <button class="btn btn-blue" style="width:100px" onclick="spawnBall()">+ Bóng</button>
+    <button class="btn" style="background:#7b1fa2; width:100px" onclick="addTrack('line')">Thẳng</button>
+    <button class="btn" style="background:#7b1fa2; width:100px" onclick="addTrack('curve')">Cong</button>
+    <div id="top-ctrl" style="display:flex; gap:15px; flex:1; align-items:center;"></div>
+</div>
+
+<div id="canvas-wrap">
+    <canvas id="sim"></canvas>
+    <div id="float-labels"></div>
+</div>
+
+<script>
+    const canvas = document.getElementById('sim'), ctx = canvas.getContext('2d');
+    const floatLabels = document.getElementById('float-labels'), cursor = document.getElementById('cursor-neon'), ctxMenu = document.getElementById('ctx-menu');
+    let balls = [], tracks = [], drag = null, isMode2 = false, selectedTrack = null;
+    let lastM = {x:0, y:0}, mVel = {x:0, y:0}, hue = 0;
+    const G = 0.55, audio = new (window.AudioContext || window.webkitAudioContext)();
+    let dragTrail = [];
+
+    const cfg = { col: true, wall: true, shock: true, throw: true, speed: 1.0, fric: 1.0, vol: 0.5 };
+
+    // Booting (5 seconds)
+    let prog = 0;
+    const bootTimer = setInterval(() => {
+        prog += 0.8;
+        document.getElementById('boot-prog').style.width = Math.min(prog, 100) + '%';
+        if(prog >= 100) { clearInterval(bootTimer); document.getElementById('boot').style.display='none'; }
+    }, 40);
+
+    function playSfx(freq, vM=1) {
+        if(audio.state === 'suspended') audio.resume();
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.frequency.setValueAtTime(freq, audio.currentTime);
+        g.gain.setValueAtTime(cfg.vol * vM * 0.1, audio.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.01, audio.currentTime+0.1);
+        o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime+0.1);
+    }
+
+    function createEffects(x, y, isClick) {
+        if(isClick) {
+            for(let i=0; i<10; i++) {
+                const crack = document.createElement('div'); crack.className = 'crack';
+                crack.style.width = '35px'; crack.style.height = '2px';
+                crack.style.left = x + 'px'; crack.style.top = y + 'px';
+                crack.style.background = `linear-gradient(90deg, hsl(${(i*36)%360},100%,60%), transparent)`;
+                crack.style.transform = `rotate(${(i/10)*360}deg)`;
+                crack.style.transformOrigin = '0 0';
+                document.body.appendChild(crack);
+                setTimeout(() => crack.remove(), 400);
+            }
+        }
+    }
+
+    function createShock(x, y, color = '#fff') {
+        if(!cfg.shock) return;
+        const s = document.createElement('div'); s.className='shock';
+        const rect = canvas.getBoundingClientRect();
+        s.style.left = (rect.left + x) + 'px'; s.style.top = (rect.top + y) + 'px';
+        s.style.setProperty('--c', color);
+        document.body.appendChild(s); setTimeout(()=>s.remove(), 400);
+    }
+
+    function spawnBall(x=150, y=100) {
+        if(balls.length >= 5) return;
+        const colors = ['#00e5ff', '#ff007f', '#39ff14', '#ffff00', '#bc13fe'];
+        balls.push({ x, y, vx:5, vy:0, vM:5, r:18, color:colors[balls.length], onTr:false, t:0, heat:0, initE:0 });
+    }
+
+    function addTrack(type, x1, y1, x2, y2, cx, cy) {
+        const w = canvas.width, h = canvas.height;
+        tracks.push({ 
+            type, 
+            p1: {x: x1 || w*0.3, y: y1 || h*0.7}, 
+            p2: {x: x2 || w*0.6, y: y2 || h*0.7}, 
+            cp: type==='curve'?{x: cx || w*0.45, y: cy || h*0.8}:null 
+        });
+    }
+
+    function loadTemplate(name) {
+        balls = []; tracks = [];
+        const w = canvas.width, h = canvas.height;
+        if(name === 'mountain') addTrack('curve', w*0.2, h*0.8, w*0.8, h*0.8, w*0.5, h*0.2);
+        if(name === 'valley') addTrack('curve', w*0.2, h*0.3, w*0.8, h*0.3, w*0.5, h*0.9);
+        if(name === 'loop') { addTrack('curve', w*0.2, h*0.2, w*0.5, h*0.8, w*0.2, h*0.8); addTrack('line', w*0.5, h*0.8, w*0.8, h*0.8); }
+        if(name === 'wave') { addTrack('curve', w*0.1, h*0.5, w*0.5, h*0.5, w*0.3, h*0.2); addTrack('curve', w*0.5, h*0.5, w*0.9, h*0.5, w*0.7, h*0.8); }
+        spawnBall(w*0.15, 100);
+    }
+
+    window.addEventListener('mousedown', e => {
+        if (e.target.closest('#ctx-menu')) return;
+        ctxMenu.style.display = 'none';
+        const r = canvas.getBoundingClientRect(), m = { x: e.clientX-r.left, y: e.clientY-r.top };
+        
+        if(e.button === 0) {
+            createEffects(e.clientX, e.clientY, true);
+            createShock(m.x, m.y, '#fff');
+            for(let b of balls) if(Math.hypot(m.x-b.x, m.y-b.y) < 30) { drag={type:'ball', obj:b}; b.onTr=false; return; }
+            for(let tr of tracks) {
+                if(Math.hypot(m.x-tr.p1.x, m.y-tr.p1.y) < 20) { drag={type:'pt', obj:tr.p1}; return; }
+                if(Math.hypot(m.x-tr.p2.x, m.y-tr.p2.y) < 20) { drag={type:'pt', obj:tr.p2}; return; }
+                if(tr.cp && Math.hypot(m.x-tr.cp.x, m.y-tr.cp.y) < 25) { drag={type:'pt', obj:tr.cp}; return; }
+                const midX = (tr.p1.x + tr.p2.x)/2, midY = (tr.p1.y + tr.p2.y)/2;
+                if(Math.hypot(m.x-midX, m.y-midY) < 50) { 
+                    drag={type:'all', obj:tr, o1:{x:tr.p1.x-m.x, y:tr.p1.y-m.y}, o2:{x:tr.p2.x-m.x, y:tr.p2.y-m.y}, oc:tr.cp?{x:tr.cp.x-m.x, y:tr.cp.y-m.y}:null}; 
+                    return; 
+                }
+            }
+        } else if(e.button === 2) {
+            for(let tr of tracks) {
+                const midX = (tr.p1.x + tr.p2.x)/2, midY = (tr.p1.y + tr.p2.y)/2;
+                if(Math.hypot(m.x-midX, m.y-midY) < 60) {
+                    selectedTrack = tr;
+                    ctxMenu.style.left = e.clientX+'px'; ctxMenu.style.top = e.clientY+'px';
+                    ctxMenu.style.display = 'block';
+                    ctxMenu.innerHTML = `
+                        <div class="ctx-item" onclick="trRotate()">Xoay 90°</div>
+                        <div class="ctx-item" onclick="trDup()">Nhân đôi</div>
+                        <div class="ctx-item" style="color:#ff1744" onclick="trDel()">Xoá bỏ</div>`;
+                    return;
+                }
+            }
+        }
+    });
+
+    window.trRotate = () => { let dx = selectedTrack.p2.x-selectedTrack.p1.x, dy = selectedTrack.p2.y-selectedTrack.p1.y; selectedTrack.p2.x=selectedTrack.p1.x-dy; selectedTrack.p2.y=selectedTrack.p1.y+dx; if(selectedTrack.cp){ let cdx=selectedTrack.cp.x-selectedTrack.p1.x, cdy=selectedTrack.cp.y-selectedTrack.p1.y; selectedTrack.cp.x=selectedTrack.p1.x-cdy; selectedTrack.cp.y=selectedTrack.p1.y+cdx; } ctxMenu.style.display='none'; };
+    window.trDup = () => { let nt = JSON.parse(JSON.stringify(selectedTrack)); nt.p1.x+=30; nt.p2.x+=30; if(nt.cp) nt.cp.x+=30; tracks.push(nt); ctxMenu.style.display='none'; };
+    window.trDel = () => { tracks = tracks.filter(t => t !== selectedTrack); ctxMenu.style.display='none'; };
+
+    window.addEventListener('mousemove', e => {
+        const r = canvas.getBoundingClientRect(), m = { x: e.clientX-r.left, y: e.clientY-r.top };
+        cursor.style.left = e.clientX + 'px'; cursor.style.top = e.clientY + 'px';
+        cursor.style.color = `hsl(${hue}, 100%, 60%)`;
+        mVel = { x: m.x-lastM.x, y: m.y-lastM.y }; lastM = {...m};
+        
+        if(drag) {
+            if(drag.type === 'pt') { 
+                drag.obj.x = m.x; drag.obj.y = m.y; 
+                tracks.forEach(tr => [tr.p1, tr.p2].forEach(p => { if(p!==drag.obj && Math.hypot(m.x-p.x, m.y-p.y)<20){ drag.obj.x=p.x; drag.obj.y=p.y; }}));
+            } else if(drag.type === 'all') {
+                drag.obj.p1.x = m.x + drag.o1.x; drag.obj.p1.y = m.y + drag.o1.y;
+                drag.obj.p2.x = m.x + drag.o2.x; drag.obj.p2.y = m.y + drag.o2.y;
+                if(drag.obj.cp) { drag.obj.cp.x = m.x + drag.oc.x; drag.obj.cp.y = m.y + drag.oc.y; }
+            } else { drag.obj.x = m.x; drag.obj.y = m.y; }
+            dragTrail.push({x: m.x, y: m.y, time: Date.now()});
+        }
+    });
+
+    window.addEventListener('mouseup', () => { if(drag?.type==='ball' && cfg.throw) { drag.obj.vx=mVel.x; drag.obj.vy=mVel.y; } drag = null; dragTrail = []; });
+
+    function getPt(t, tr) {
+        let x, y, dx, dy;
+        if(tr.type==='curve') {
+            const mt = 1-t;
+            x = mt*mt*tr.p1.x + 2*mt*t*tr.cp.x + t*t*tr.p2.x;
+            y = mt*mt*tr.p1.y + 2*mt*t*tr.cp.y + t*t*tr.p2.y;
+            dx = 2*(1-t)*(tr.cp.x-tr.p1.x) + 2*t*(tr.p2.x-tr.cp.x);
+            dy = 2*(1-t)*(tr.cp.y-tr.p1.y) + 2*t*(tr.p2.y-tr.cp.y);
+        } else {
+            x = tr.p1.x + t*(tr.p2.x-tr.p1.x); y = tr.p1.y + t*(tr.p2.y-tr.p1.y);
+            dx = tr.p2.x-tr.p1.x; dy = tr.p2.y-tr.p1.y;
+        }
+        return { x, y, angle: Math.atan2(dy, dx), len: Math.hypot(dx, dy) };
+    }
+
+    function loop() {
+        ctx.clearRect(0,0, canvas.width, canvas.height);
+        const floor = canvas.height-20, fK = cfg.fric * 0.003;
+        floatLabels.innerHTML = ''; let statsHtml = ''; hue = (hue + 4) % 360;
+
+        // Lightning Trail (0.5s)
+        const now = Date.now();
+        dragTrail = dragTrail.filter(p => now - p.time < 500);
+        if(dragTrail.length > 1) {
+            ctx.beginPath(); ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`; ctx.lineWidth = 2;
+            ctx.moveTo(dragTrail[0].x, dragTrail[0].y);
+            for(let i=1; i<dragTrail.length; i++) ctx.lineTo(dragTrail[i].x + (Math.random()-0.5)*15, dragTrail[i].y + (Math.random()-0.5)*15);
+            ctx.stroke();
+        }
+
+        tracks.forEach(tr => {
+            ctx.beginPath(); ctx.lineWidth=12; ctx.lineCap="round"; ctx.strokeStyle="rgba(0,229,255,0.2)";
+            if(tr.type==='curve') { for(let t=0;t<=1;t+=0.01){ let p=getPt(t,tr); t===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y); } }
+            else { ctx.moveTo(tr.p1.x, tr.p1.y); ctx.lineTo(tr.p2.x, tr.p2.y); }
+            ctx.stroke();
+            [tr.p1, tr.p2].forEach(p => { ctx.fillStyle="#7b1fa2"; ctx.beginPath(); ctx.arc(p.x,p.y,6,0,7); ctx.fill(); });
+            if(tr.cp) { ctx.fillStyle="#ffff00"; ctx.beginPath(); ctx.arc(tr.cp.x,tr.cp.y,8,0,7); ctx.fill(); }
+        });
+
+        for(let i=balls.length-1; i>=0; i--) {
+            let b = balls[i];
+            if(drag?.obj !== b) {
+                for(let s=0; s<cfg.speed; s+=0.2) {
+                    if(!b.onTr) {
+                        b.vy += G*0.2; b.x += b.vx*0.2; b.y += b.vy*0.2;
+                        if(cfg.wall && (b.x<b.r || b.x>canvas.width-b.r)){ b.vx*=-0.8; b.x=b.x<b.r?b.r:canvas.width-b.r; createShock(b.x,b.y,b.color); playSfx(400); }
+                        else if(!cfg.wall && (b.x<-100 || b.x>canvas.width+100)){ balls.splice(i,1); break; }
+                        if(b.y >= floor-b.r) { b.y=floor-b.r; b.vy*=-0.1; b.vx*=(1-fK); b.heat+=Math.abs(b.vx*fK*20); if(Math.abs(b.vy)>0.8){createShock(b.x,b.y,b.color); playSfx(200);} }
+                        tracks.forEach(tr => { for(let t=0; t<=1; t+=0.02) { let p=getPt(t,tr); if(Math.hypot(b.x-p.x, b.y-p.y)<18){b.onTr=true; b.trRef=tr; b.t=t; b.vM=b.vx*Math.cos(p.angle)+b.vy*Math.sin(p.angle); break;}}});
+                    } else {
+                        let p = getPt(b.t, b.trRef); b.vM += G*Math.sin(p.angle)*0.2; b.vM *= (1-fK*0.2); b.heat += Math.abs(b.vM*fK*10);
+                        b.t += (b.vM/p.len)*0.2;
+                        if(b.t<0 || b.t>1){ b.onTr=false; b.vx=b.vM*Math.cos(p.angle); b.vy=b.vM*Math.sin(p.angle); }
+                        else { let np=getPt(b.t,b.trRef); b.x=np.x; b.y=np.y-b.r; }
+                    }
+                }
+            }
+
+            if(cfg.col) {
+                for(let j=i-1; j>=0; j--) {
+                    let b2=balls[j]; if(Math.hypot(b.x-b2.x, b.y-b2.y)<b.r+b2.r){
+                        let v1=b.onTr?b.vM:b.vx, v2=b2.onTr?b2.vM:b2.vx;
+                        if(b.onTr) b.vM=v2; else b.vx=v2; if(b2.onTr) b2.vM=v1; else b2.vx=v1;
+                        createShock((b.x+b2.x)/2, (b.y+b2.y)/2, b.color); playSfx(600, 0.5);
+                    }
+                }
+            }
+
+            let Ek = 0.5 * Math.pow(b.onTr?b.vM:Math.hypot(b.vx, b.vy), 2)*10;
+            let Ep = Math.max(0, floor-(b.y+b.r))*G*15;
+            if(b.initE===0 || drag?.obj===b) b.initE = Ek+Ep+b.heat;
+            let tot = b.initE||1, pK = Math.round((Ek/tot)*100), pP = Math.round((Ep/tot)*100), pM = Math.max(0, 100-pK-pP);
+
+            const f = document.createElement('div'); f.className='ball-label'; f.style.left=b.x+'px'; f.style.top=b.y+'px';
+            if(isMode2) f.innerHTML = `<div class="mini-bar"><div style="width:${pK}%;background:#00e5ff"></div><div style="width:${pP}%;background:#ff9100"></div><div style="width:${pM}%;background:#ff1744"></div></div>`;
+            else {
+                f.innerHTML = `<div style="font-size:9px;font-weight:bold;color:#00e5ff">Động: ${pK}% | Thế: ${pP}% | Ma sát Mất: ${pM}%</div>`;
+                statsHtml += `<div class="group" style="border-left:5px solid ${b.color}">
+                    <b style="color:${b.color}">BÓNG ${i+1}</b><br><span style="font-size:9px">Thế năng: ${pP}% , Động năng: ${pK}%, Ma sát: ${pM}%</span>
+                    <div class="bar-container"><div class="seg" style="width:${pK}%; background:#00e5ff">${pK}%</div><div class="seg" style="width:${pP}%; background:#ff9100">${pP}%</div><div class="seg" style="width:${pM}%; background:#ff1744; color:#fff">${pM}%</div></div></div>`;
+            }
+            floatLabels.appendChild(f);
+            ctx.shadowBlur=15; ctx.shadowColor=b.color; ctx.fillStyle=b.color; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.fill(); ctx.shadowBlur=0;
+        }
+        document.getElementById('sidebar-stats').innerHTML = statsHtml;
+        requestAnimationFrame(loop);
+    }
+
+    function toggleUI() { isMode2=!isMode2; document.getElementById('sidebar').classList.toggle('hide', isMode2); document.getElementById('top-ui').style.display=isMode2?'flex':'none'; renderControls(isMode2?'top-ctrl':'side-ctrl'); }
+    function renderControls(id) {
+        document.getElementById(id).innerHTML = `
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+                <label><input type="checkbox" ${cfg.col?'checked':''} onchange="cfg.col=this.checked"> Va chạm</label>
+                <label><input type="checkbox" ${cfg.wall?'checked':''} onchange="cfg.wall=this.checked"> Tường</label>
+                <label><input type="checkbox" ${cfg.shock?'checked':''} onchange="cfg.shock=this.checked"> Xung kích</label>
+                <label><input type="checkbox" ${cfg.throw?'checked':''} onchange="cfg.throw=this.checked"> Ném bi</label>
+            </div>
+            <div style="font-size:10px">Tốc độ: x${cfg.speed.toFixed(1)} <input type="range" min="0.1" max="2" step="0.1" value="${cfg.speed}" oninput="cfg.speed=parseFloat(this.value); renderControls('${id}')"></div>
+            <div style="font-size:10px">Ma sát: x${cfg.fric.toFixed(1)} <input type="range" min="0" max="2" step="0.1" value="${cfg.fric}" oninput="cfg.fric=parseFloat(this.value); renderControls('${id}')"></div>
+            <div style="font-size:10px">Âm lượng: <input type="range" min="0" max="1" step="0.1" value="${cfg.vol}" oninput="cfg.vol=parseFloat(this.value)"></div>`;
+    }
+
+    renderControls('side-ctrl'); spawnBall(); loop();
+    window.addEventListener('resize', () => { canvas.width = document.getElementById('canvas-wrap').clientWidth; canvas.height = document.getElementById('canvas-wrap').clientHeight; });
+    canvas.width = document.getElementById('canvas-wrap').clientWidth; canvas.height = document.getElementById('canvas-wrap').clientHeight;
+</script>
+</body>
+</html>
